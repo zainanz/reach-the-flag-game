@@ -23,10 +23,9 @@ function preload()
     
     //load your sounds here
     jumpSound = loadSound('assets/jump.wav');
-    jumpSound.setVolume(0.005);
+    jumpSound.setVolume(0.009);
     backgroundSound = loadSound('assets/background.wav');
-    backgroundSound.setVolume(0.07);
-    //walkingSound = loadSound('assets/walking.wav'); # decided to not use it, its quite noisdy and annoying.
+    backgroundSound.setVolume(0.05);
     victorySound = loadSound('assets/victory.mp3')
     victorySound.setVolume(0.02);
 }
@@ -42,7 +41,7 @@ var isPlummeting;
 var CameraPosX;
 var canyonfall;
 var score;
-var gameState; // 0 = working game, 1 = win, 2 = game over.
+var gameState = -1; // -1 = intro, 0 = working game, 1 = win, 2 = game over.
 var lives;
 var arrowFall;
 //objects
@@ -51,32 +50,72 @@ var collectables;
 var clouds;
 var mountains;
 var flagpole;
-
+let healthbar; 
 var treePos_x; //array
 var treePos_y;
 
+// Gradient Background
+let c1, c2;
+let cord1;
+let cord2;
 function setup()
 {
     
 	createCanvas(1024, 576);
     floorPos_y = height * 3/4;
+    backgroundSound.play();
     lives = 3;
     startGame();
-    backgroundSound.play();
-    a = new createEnemies(4);
+    enemy = new createEnemies(6);
 }
     
 function draw()
 {
-
-	///////////DRAWING CODE//////////
-	background(100,155,255); //Blue Sky
+if(gameState == -1){
+    push();
+    background(100, 100, 100);
+    stroke(0);
+    fill(0);
+    textSize(22);
+    textAlign(CENTER);
+    // tutorial/guide
+    text('Welcome!', width/2, 50);
+    text('The task is simple, you have to reach the flagpole.', width/2, 100);
+    text('There are various obstacles along the way. I am sure you will figure it out yourself.', width/2, 150);
+    text('But I must warn you about your clones. They may look friendly but they are hostile creatures.', width/2, 200);
+    text('Dodge or Eliminate them! Hold Space to grab them and toss them into the depts of the canyon.', width/2, 250);
+    text('Good Luck, Solider! See you on the other side :)', width/2, 300);
+    fill(255, 0, 0);
+    textSize(35);
+    text('Press SPACE to proceed!', width/2, 450);
+    pop();
+}else{
+    ///////////DRAWING CODE////////// //Blue Sky
+    push();
+     for(let colloop = 0; colloop < cord1; colloop++)
+        {
+            amt = map(colloop, 0, cord1, 0.3, 1);
+            let nc = lerpColor(c1,c2, amt)
+            stroke(nc);
+            line(0, colloop, width, colloop);
+            
+        }
+    for(let colloop = cord1; colloop < cord2; colloop++)
+        {
+            amt = map(colloop, cord1, cord2, 0.05, .75);
+            let nc = lerpColor(c3,c4, amt)
+            stroke(nc);
+            line(0, colloop, width, colloop);
+            
+        }
+    pop();
+    
     textSize(30);
     
     //Ground
     push();
     noStroke();
-	fill(0, 155, 0);
+	fill(34,139,34);
 	rect(0, floorPos_y, width, height - floorPos_y);
     pop();
     
@@ -84,8 +123,7 @@ function draw()
     push();
     translate(-CameraPosX, 0);
     //Mountain behind everything except clouds.
-    drawMountains();
-    
+    mountains.drawMountain();   
     //cloud
     drawClouds();
     
@@ -97,7 +135,18 @@ function draw()
     renderFlagpole();
     // The function >> drawCollectables also calls another function checkCollectables. 
     drawCollectable(collectables);
-    a.spawnEnemies();
+    enemy.displayEnemies();
+    
+    //display healthbar; - Whenever player is in contact with the clone, they damage him -50. (CODE AT LINE 897)
+    push();
+    tbar = map(healthbar, 0, 100, 0, 50);
+    fill(128,0,0);
+    rect(gameChar_x - 25, gameChar_y-100, 50, 05);
+    fill(255,0,0);
+    rect(gameChar_x - 25, gameChar_y-100, tbar, 05);
+    pop();
+
+    
     //the game character
 	if(isLeft && isJumping)
 	{
@@ -236,13 +285,12 @@ function draw()
         rect(gameChar_x-8, gameChar_y-37, 15, 20);rect(gameChar_x-8,gameChar_y-37, -5,5);rect(gameChar_x+7,gameChar_y-37, 5,5);
         fill(0,0,255);strokeWeight(0.5);stroke(0);rect(gameChar_x-8,gameChar_y-17,7.5,5);rect(gameChar_x-0.5,gameChar_y-17,7.5,5);fill(167,114,28);;ellipse(gameChar_x,gameChar_y-65,13,13); rect(gameChar_x-13,gameChar_y-62, 25,5);//clothing
 	}
-    //arrowFall.update();
+    arrowFall.update();
     pop(); // End of SideScrolling
     //SCORE Counter
     fill(0);
     text("SCORE: " + score, 10, 30);
 	///////////INTERACTION CODE//////////
-    console.log(gameChar_y-floorPos_y);
     if(isJumping){ 
         gameChar_y = floorPos_y - 100;
     }
@@ -251,7 +299,6 @@ function draw()
         if(gameChar_x > width/2)
             {
                 CameraPosX +=4;
-                console.log('Following at ' + CameraPosX + gameChar_x);
             }
         gameChar_x += 4;
         
@@ -283,7 +330,8 @@ function draw()
         }
     checkPlayerDie();
     showLives();
-    checkWin();
+    checkFlagpole();
+}
 }
 
 
@@ -303,15 +351,24 @@ function keyPressed()
             jumpSound.play();
             gameChar_y = floorPos_y - 100; // if player is not inside a canyon, he will be allowed jump. 
         }
-        isPlummeting = true // time to get back to earth
+        isPlummeting = true 
     }
-    if(keyCode == 32 && gameState == 2){
-        lives = 3;
-        startGame();
+    if(keyCode == 32){
+        if(gameState == -1)
+        {
+            gameState = 0;
+        }
+        if(gameState == 0)
+        {
+            enemy.enemygrab();
+        }
+        if(gameState == 2){
+            lives = 3;
+            startGame();
+            enemy.generateEnemies();
+            gameState = 0;
+        }
     }
-	//open up the console to see how these work
-	console.log("keyPressed: " + key);
-	console.log("keyPressed: " + keyCode);
 }
 
 function keyReleased()
@@ -324,8 +381,10 @@ function keyReleased()
     if(keyCode == 37 || keyCode == 65){
         isLeft = false;
     }
-	console.log("keyReleased: " + key);
-	console.log("keyReleased: " + keyCode);
+    if(keyCode == 32 && gameState == 0)
+        {
+            enemy.enemydrop();
+        }
 }
 
 // draw functions
@@ -358,22 +417,6 @@ function drawTrees()
     }
        
 }
-function drawMountains()
-{
-    for(var i= 0;i < mountains.length; i++){
-        push();
-        fill(100);
-        noStroke();
-        beginShape();
-        vertex(mountains[i].x_pos,floorPos_y);
-        vertex(mountains[i].x_pos+130*mountains[i].scale,floorPos_y);
-        vertex(mountains[i].x_pos + 86*mountains[i].scale,floorPos_y-84* mountains[i].scale);
-        vertex(mountains[i].x_pos+59*mountains[i].scale,floorPos_y- 93*mountains[i].scale);
-        vertex(mountains[i].x_pos+16*mountains[i].scale,floorPos_y- 38 * mountains[i].scale);
-        endShape(); 
-        pop();
-    }  
-}
 function drawCollectable(t_collectable)
 {
     for(var i = 0; i < collectables.length; i++){
@@ -391,31 +434,25 @@ function drawCollectable(t_collectable)
         
 }
     
-function drawCanyon(t_canyon)
+function drawCanyon()
 {
-    for(var i =0; i < t_canyon.x_pos.length; i++){
+    for(var i =0; i < canyons.x_pos.length; i++){
         
         push();
         fill(92, 64, 51);
         noStroke();
-        rect(t_canyon.x_pos[i], floorPos_y, t_canyon.width[i]*1, 100);
-        rect(t_canyon.x_pos[i]-20*t_canyon.width[i]/100, floorPos_y+58, t_canyon.width[i]*1.40, 100);
+        rect(canyons.x_pos[i], floorPos_y, canyons.width[i]*1, 100);
+        rect(canyons.x_pos[i]-20*canyons.width[i]/100, floorPos_y+58, canyons.width[i]*1.40, 100);
         stroke(100,50,230);
         fill(100,50,230);
-        rect(t_canyon.x_pos[i]+25*t_canyon.width[i]/100, floorPos_y, t_canyon.width[i]*0.5, t_canyon.width[i]);
-        ellipse(t_canyon.x_pos[i]+50*t_canyon.width[i]/100, floorPos_y+t_canyon.width[i], t_canyon.width[i]/2, t_canyon.width[i]);
-        fill(255,0,0);
-        ellipse(t_canyon.x_pos[i], floorPos_y, 10, 10);
-        ellipse(t_canyon.x_pos[i]+ 25*t_canyon.width[i]/100, floorPos_y, 10, 10);
-        ellipse(t_canyon.x_pos[i] + 25 * t_canyon.width[i]/100+ t_canyon.width[i]*0.5, floorPos_y, 10, 10 );
-        ellipse(t_canyon.x_pos[i] + 50* t_canyon.width[i]/100, floorPos_y, 10, 10 );
+        rect(canyons.x_pos[i]+25*canyons.width[i]/100, floorPos_y, canyons.width[i]*0.5, canyons.width[i]);
+        ellipse(canyons.x_pos[i]+50*canyons.width[i]/100, floorPos_y+canyons.width[i], canyons.width[i]/2, canyons.width[i]);
         pop();
-        checkCanyon(t_canyon.x_pos[i], t_canyon.width[i]); // detects if the player is between the canyon under a certain condition, if it's met player falls down.
+        checkCanyon(canyons.x_pos[i], canyons.width[i], gameChar_x, gameChar_y); // detects if the player is between the canyon under a certain condition, if it's met player falls down.
     }
 }
 
 function renderFlagpole(){
-    checkFlagpole();
     push();
     strokeWeight(10);
     stroke(255);
@@ -441,20 +478,28 @@ function checkCollectables(t_collectable)
     }
     
 }
-function checkCanyon(x_pos, cwidth)
+function checkCanyon(x_pos, cwidth, targetx, targety)
 {
     var canyon_xPos = {x1:x_pos+ 25*cwidth/100,
                    x2: x_pos + 25 *cwidth/100+cwidth*0.5
                     }
-    if((gameChar_x > canyon_xPos.x1 && gameChar_x < canyon_xPos.x2) && gameChar_y >= floorPos_y){
-        canyonfall = true;
-        isPlummeting= true;
+    if((targetx > canyon_xPos.x1 && targetx < canyon_xPos.x2) && targety >= floorPos_y){
+        if(targetx == gameChar_x)
+            {
+            canyonfall = true;
+            isPlummeting= true;
+            }
+        else{
+            return true;
+        }
     }
 
 }
 function checkFlagpole(){
     if(gameChar_x > flagpole.x_pos){
         flagpole.is_Reached = true;
+        levelComplete();
+        gameState = 1;
     }else{
         flagpole.is_Reached = false;
     }
@@ -466,29 +511,30 @@ function checkFlagpole(){
 
 function checkPlayerDie(){
     
-    if(gameChar_y > height){
+    if(gameChar_y > height  && gameState == 0){
         lives -= 1;
         if(lives > 0){
+            enemy.enemydrop();
             startGame();
         }
     }
-    for(var i = 0; i < arrowFall.quan; i++)
-        {
-            if(dist(arrowFall.x[i], arrowFall.y[i]+20, gameChar_x,gameChar_y) < 30)
-                {
-                    lives -= 1;
-                    startGame();
-                }
-        }
 
 }
     
-function startGame(){
+function startGame()
+{
+    c1 = color(0,255,255);
+    c2 = color(255,215,0);
+    c3 = color(255,215,0);
+    c4 = color(255,69,0);
+    healthbar = 100;
+    let df = 100;
+    cord1 = height - ((height-floorPos_y) + df);
+    cord2 = cord1 + df; 
     isRight = false;
     isLeft = false;
     isJumping = false;
     isPlummeting = false;
-    gameState = 0;
     CameraPosX = 0;
     canyonfall = false;
     arrowFall = arrowDraw(10);
@@ -510,7 +556,7 @@ function startGame(){
                     do{ //using do{}while() i stripped away the first number from the holder, pushing it into x_pos.
                         //x_pos[0] will put under an if condition to check if the distance is less than 150 or width of the first that is being used.
                         // x.pos is reversed so the last added number's index is set to 0 and we can continue to use the this method/formula.
-                        // x.width is also reversed to sync both the canyons and its width. it took me quite a while to come up with this but I am really proud of this :)
+                        // x.width is also reversed to sync both the canyons and its width.
                         
                         this.x_pos.push(this.holder.splice(0, 1)[0]);
                         this.width.push(this.hwidth.splice(0, 1)[0]);
@@ -527,7 +573,6 @@ function startGame(){
                 }
     }
     canyons.generateArrays();
-
 	flagpole = {
         x_pos: 5000,
         is_Reached: false
@@ -599,39 +644,36 @@ function startGame(){
     }
     
     ];
-    mountains = [{
-        x_pos: -400,
-        y_pos: floorPos_y,
-        scale: 6
-    },{
-        x_pos:420,
-        y_pos:floorPos_y,
-        scale:5
-    },{
-        x_pos: 1200,
-        y_pos: floorPos_y,
-        scale: 6
-    },{
-        x_pos: 2200,
-        y_pos: floorPos_y,
-        scale: 3
-    },{
-        x_pos: 3200,
-        y_pos: floorPos_y,
-        scale: 5
-    },{
-        x_pos: 3500,
-        y_pos: floorPos_y,
-        scale: 1
-    },{
-        x_pos: 4200,
-        y_pos: floorPos_y,
-        scale: 3
-    },{
-        x_pos: 5000,
-        y_pos: floorPos_y,
-        scale: 6
-    }];
+    mountains = {
+        x_pos : [0, 700, 1200, 1500, 1800, 2200, 2600, 3400, 3800, 4500, 4900, 5500],
+        scale : [5, 2, 3, 6, 4, 3, 6, 3, 3, 4, 3, 5],
+        col : [color(60,60,60), color(60,60,60), color(60,60,60), color(60,60,60), color(60,60,60),color(60,60,60),color(60,60,60),color(60,60,60),color(60,60,60),color(60,60,60),color(60,60,60),color(60,60,60)],
+        initialize : function(){
+            for(var i = 0; i < random(30, 55); i++)
+                {
+                    this.x_pos.push(round(random(0, 5000)));
+                    this.scale.push(random(0, 2.5));
+                    this.col.push(color(random(0, 130), random(120, 255), random(113,230), 70));
+                }
+        },
+        drawMountain: function(){
+                 for(var i= this.x_pos.length-1;i >= 0; i--)
+                 {
+                        push();
+                        fill(this.col[i]);
+                        noStroke();
+                        beginShape();
+                            vertex(this.x_pos[i],floorPos_y);
+                            vertex(this.x_pos[i]+130*this.scale[i],floorPos_y);
+                            vertex(this.x_pos[i] + 86*this.scale[i],floorPos_y-84* this.scale[i]);
+                            vertex(this.x_pos[i]+59*this.scale[i],floorPos_y- 93*this.scale[i]);
+                            vertex(this.x_pos[i]+16*this.scale[i],floorPos_y- 38 * this.scale[i]);
+                        endShape(); 
+                        pop();
+                }
+    }
+    };
+    mountains.initialize();
     treePos_x = [-10];
     for(var i= 1; i < 50; i++){
         treePos_x[i] = random(i*200, i*600); 
@@ -662,8 +704,9 @@ function levelComplete(){
     isRight = false;
     isLeft = false;
     gameState = 1;
+    backgroundSound.pause();
     if(!victorySound.isPlaying()){
-        victorySound.play().noLoop();
+        victorySound.play();
     }
 }
 function showLives(){
@@ -674,11 +717,6 @@ function showLives(){
         line(15 + l * 30, 40, 30 + l * 30, 55);
         line(15 + l * 30, 55, 30 + l * 30,40);
         pop();
-    }
-}
-function checkWin(){
-    if(flagpole.is_Reached){
-        levelComplete();
     }
 }
 function arrowDraw(num){
@@ -732,6 +770,19 @@ function arrowDraw(num){
                     this.y[i] += this.ySpeed[i];
                 }
             }
+            for(var i = 0; i < arrowFall.quan; i++)
+        {
+            if(dist(this.x[i], this.y[i]+20, gameChar_x,gameChar_y) < 30)
+                {
+                    if(gameState == 0)
+                        {
+                        enemy.enemydrop();
+                        lives -= 1;
+                        startGame();
+                        }
+                }
+        }
+    
             this.draw();
         }
     }
@@ -740,37 +791,168 @@ function arrowDraw(num){
 }
 //
 function createEnemies(num){
-    this.y = floorPos_y;
-    this.enemyX = [];
+    this.enemyCords = [];
     this.enemyinc = [];
-    this.forwardwalk = true;
-    this.backwalk = false;
-    this.updateEnemies = function(){
+    this.enemyface = [];
+    this.enemygrabbed = null; //index; 
+    this.generateEnemies = function(){
         for(var i = 0 ; i < num; i++)
             {
-                this.enemyX.push(random(0, 3000));
-                this.enemyinc.push(0);
+                this.enemyCords.push({x:random(800+i*0.5, 3000+i*0.5), y:floorPos_y});
+                this.enemyinc.push(2);
+                this.enemyface.push('right');
             }
         
     }
-    this.spawnEnemies = function(){
-        for(var i = 0; i < this.enemyX.length; i++)
-            {
-                this.enemymovements(i);
-                ellipse(this.enemyX[i], floorPos_y, 50, 50);
-            }
+    this.displayEnemies = function(){
+       for(var i = 0; i < this.enemyCords.length; i++)
+                    {
+                                if(this.enemyface[i] == 'right')
+                                    {
+                                        fill(255, 220, 150);
+                                        ellipse(this.enemyCords[i].x, this.enemyCords[i].y-50, 15, 20);rect(this.enemyCords[i].x-4, this.enemyCords[i].y-41, 6,3); //head and neck
+                                        strokeWeight(0.5);stroke(0);
+                                        beginShape();
+                                        vertex(this.enemyCords[i].x-6,this.enemyCords[i].y-17);vertex(this.enemyCords[i].x-10,this.enemyCords[i].y+1);vertex(this.enemyCords[i].x-5,this.enemyCords[i].y+1);vertex(this.enemyCords[i].x+2,this.enemyCords[i].y-12);
+                                        endShape();
+                                        beginShape();
+                                        vertex(this.enemyCords[i].x+4,this.enemyCords[i].y-17);vertex(this.enemyCords[i].x+13,this.enemyCords[i].y+1);vertex(this.enemyCords[i].x+7,this.enemyCords[i].y+1);vertex(this.enemyCords[i].x-3.5,this.enemyCords[i].y-12);
+                                        endShape();
+                                        fill(255,0,0);
+                                        rect(this.enemyCords[i].x-8, this.enemyCords[i].y-37, 15, 20);
+                                        fill(0,0,255);strokeWeight(0.5);stroke(0);rect(this.enemyCords[i].x-3,this.enemyCords[i].y-17,10,5);strokeWeight(0);rect(this.enemyCords[i].x-8,this.enemyCords[i].y-17,7.5,5);
+                                        fill(167,114,28);strokeWeight(1);ellipse(this.enemyCords[i].x,this.enemyCords[i].y-60,13,13); rect(this.enemyCords[i].x-13,this.enemyCords[i].y-57, 25,5);//clothing
+                                        fill(255,220,150);
+                                        strokeWeight(0.5);
+                                        beginShape();
+                                        vertex(this.enemyCords[i].x+5,this.enemyCords[i].y-31);vertex(this.enemyCords[i].x+21,this.enemyCords[i].y-17);vertex(this.enemyCords[i].x+15,this.enemyCords[i].y-17);vertex(this.enemyCords[i].x-4,this.enemyCords[i].y-31);
+                                        endShape();
+                                    }
+                                else if(this.enemyface[i] == 'left')
+                                    {
+                                        fill(255, 220, 150);
+                                        ellipse(this.enemyCords[i].x, this.enemyCords[i].y-50, 15, 20);rect(this.enemyCords[i].x-4, this.enemyCords[i].y-41, 6,3); //head and neck
+                                        strokeWeight(0.5);stroke(0);
+                                        beginShape();
+                                        vertex(this.enemyCords[i].x+5,this.enemyCords[i].y-17);vertex(this.enemyCords[i].x+9,this.enemyCords[i].y+1);vertex(this.enemyCords[i].x+4,this.enemyCords[i].y+1);vertex(this.enemyCords[i].x-3,this.enemyCords[i].y-12);
+                                        endShape();
+                                        beginShape();
+                                        vertex(this.enemyCords[i].x-4,this.enemyCords[i].y-17);vertex(this.enemyCords[i].x-13,this.enemyCords[i].y+1);vertex(this.enemyCords[i].x-7,this.enemyCords[i].y+1);vertex(this.enemyCords[i].x+3,this.enemyCords[i].y-12);
+                                        endShape();
+
+                                        fill(255,0,0);
+                                        rect(this.enemyCords[i].x-8, this.enemyCords[i].y-37, 15, 20);
+                                        fill(0,0,255);strokeWeight(0.5);stroke(0);rect(this.enemyCords[i].x-8,this.enemyCords[i].y-17,10,5);strokeWeight(0);rect(this.enemyCords[i].x-0.5,this.enemyCords[i].y-17,7.5,5);fill(167,114,28);strokeWeight(1);ellipse(this.enemyCords[i].x,this.enemyCords[i].y-60,13,13); rect(this.enemyCords[i].x-13,this.enemyCords[i].y-57, 25,5);//clothing
+                                        fill(255,220,150);
+                                        strokeWeight(0.5);
+                                         beginShape();
+                                        vertex(this.enemyCords[i].x-5,this.enemyCords[i].y-31);vertex(this.enemyCords[i].x-21,this.enemyCords[i].y-17);vertex(this.enemyCords[i].x-15,this.enemyCords[i].y-17);vertex(this.enemyCords[i].x+4,this.enemyCords[i].y-31);
+                                        endShape();
+                                    }
+                                else if(this.enemyface[i] == 'front')
+                                    {
+                                        fill(255, 220, 150);strokeWeight(0);  
+                                        ellipse(this.enemyCords[i].x, this.enemyCords[i].y-50, 20, 20);rect(this.enemyCords[i].x-4, this.enemyCords[i].y-41, 8,5);strokeWeight(0.5);stroke(1);rect(this.enemyCords[i].x-13,this.enemyCords[i].y-33, 5,15);rect(this.enemyCords[i].x+7,this.enemyCords[i].y-33, 5,15);rect(this.enemyCords[i].x-7,this.enemyCords[i].y-12,5,15);rect(this.enemyCords[i].x,this.enemyCords[i].y-12,5,15);//skin
+                                        fill(255,0,0);strokeWeight(0);
+                                        rect(this.enemyCords[i].x-8, this.enemyCords[i].y-37, 15, 20);rect(this.enemyCords[i].x-8,this.enemyCords[i].y-37, -5,5);rect(this.enemyCords[i].x+7,this.enemyCords[i].y-37, 5,5);
+                                        fill(0,0,255);strokeWeight(0.5);stroke(0);rect(this.enemyCords[i].x-8,this.enemyCords[i].y-17,7.5,5);rect(this.enemyCords[i].x-0.5,this.enemyCords[i].y-17,7.5,5);fill(167,114,28);;ellipse(this.enemyCords[i].x,this.enemyCords[i].y-65,13,13); rect(this.enemyCords[i].x-13,this.enemyCords[i].y-62, 25,5);
+                                    }
+                                this.updateEnemies(i);
+                                }
     }
-    this.enemymovements = function(index){
-        for(var x = 0;x < canyons.length; x++)
-            if(dist(this.enemyX[index], floorPos_y, canyons.x_pos[x], floorPos_y) < 50){
-                this.enemyinc[index] = -2;
-            }
-           if(dist(this.enemyX[index], floorPos_y, canyons.x_pos[x]+canyons.width[x], floorPos_y) < 50)
+    this.updateEnemies = function(i){
+        if(this.enemygrabbed == i){
+            this.enemyface[this.enemygrabbed] = 'front';
+            this.enemyinc[this.enemygrabbed] = 0;
+            if(isRight)
                 {
-                    this.enemyinc[index] = 2;
+                    this.enemyCords[i].x = gameChar_x + 30;
+                    this.enemyCords[i].y = gameChar_y;
                 }
-        
-        this.enemyX[index]+= this.enemyinc[index];
+            if(isLeft)
+                {
+                    this.enemyCords[i].x = gameChar_x - 30;
+                    this.enemyCords[i].y = gameChar_y;
+                }
+            if(!isLeft && !isRight)
+                {
+                    this.enemyCords[i].y = gameChar_y;
+                }
+        }else{
+                if(dist(gameChar_x, floorPos_y, this.enemyCords[i].x, this.enemyCords[i].y) < 2)
+                            {
+                                if(healthbar > 0 && this.enemyface[i] != 'front'){
+                                    healthbar -= 50;
+                                    var tempface;
+                                    var tempinc;  
+                                    tempface = this.enemyface[i];
+                                    tempinc = this.enemyinc[i];
+                                    this.enemyface[i] = 'front';
+                                    this.enemyinc[i] = 0;
+                                    setTimeout(() => { this.enemyface[i] = tempface; }, 5000);
+                                    setTimeout(() => { this.enemyinc[i] = tempinc; }, 5000);
+                                }
+                                if(healthbar <= 0){
+                                                    lives --;
+                                                    this.enemydrop();
+                                                    startGame();
+                                                }
+                                }
+
+                for(var x = 0; x < canyons.x_pos.length; x++)
+                    {
+                    if(checkCanyon(canyons.x_pos[x], canyons.width[x], this.enemyCords[i].x, this.enemyCords[i].y) || this.enemyCords[i].y > floorPos_y)
+                            {
+                                this.enemyCords[i].y += 2;
+                                this.enemyinc[i] = 0;
+                                this.enemyface[i] = 'front';
+                            }
+                    else if(dist(canyons.x_pos[x], floorPos_y, this.enemyCords[i].x, floorPos_y) < 5){
+                            this.enemyinc[i] = -2;
+                            this.enemyface[i] = 'left';
+
+                    }
+                    else if(dist(canyons.x_pos[x]+canyons.width[x], floorPos_y, this.enemyCords[i].x, floorPos_y) < 5 || this.enemyCords[i].x < 2){
+                            this.enemyinc[i] = +2;
+                            this.enemyface[i] = 'right';
+                    }
+                    }
+                this.enemyCords[i].x += this.enemyinc[i];
+            }
+        if(this.enemyCords[i].y > height){
+            this.enemyCords.splice(i, 1);
+            this.enemyface.splice(i, 1);
+            this.enemyinc.splice(i, 1);
+            
+        }
+        }
+    this.enemygrab = function(){
+        for(var i =0; i < this.enemyCords.length; i++)
+            {
+                if(this.enemygrabbed == null)
+                {
+                    
+                    if(dist(this.enemyCords[i].x, this.enemyCords[i].y, gameChar_x, floorPos_y) < 70)
+                        {
+                            this.enemygrabbed = i;
+                        }
+                }
+            }
     }
-    this.updateEnemies();
+    this.enemydrop = function()
+    {
+        if(this.enemygrabbed != null)
+            {
+            var temp = {face:['right','left'],
+                        inc:[2, -2]};
+            var rnum = round(random(0,1));
+            var tindex = this.enemygrabbed;
+            this.enemygrabbed = null;
+            setTimeout(() => {this.enemyface[tindex] = temp.face[rnum]; }, 5000);
+            setTimeout(() => {this.enemyinc[tindex] = temp.inc[rnum];}, 5000);
+            this.enemyCords[tindex].y = floorPos_y;
+                
+            }
+    }
+    this.generateEnemies();
 }
