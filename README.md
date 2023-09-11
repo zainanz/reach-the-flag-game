@@ -1,4 +1,3 @@
-# uol-gameproj
+# UoL Project
 
-// game project 7.
-- Enemies mising.
+- Creating a game using psj5 library.
